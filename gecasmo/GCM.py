@@ -4,14 +4,14 @@ from numpy import linalg as la
 from keras.callbacks import EarlyStopping
 import keras.backend as Kback
 from sklearn.metrics import log_loss
-from scipy.sparse import coo_matrix
+#from scipy.sparse import coo_matrix
 import multiprocessing as mp
-from scripts.verboseprinter import VerbosePrinter as VP
+from gecasmo.verboseprinter import VerbosePrinter as VP
 
 
 class GCM:
     """
-    Static class for fitting Generalized click model_definitions.
+    Static class for fitting Generalized click models.
     """
     # Minimum probabilistic signal
     MIN_SIGNAL = 10**(-5)
@@ -19,7 +19,7 @@ class GCM:
     @staticmethod
     def runEM(click_mat, var_dic, var_models, item_order, model_def,
               n_jobs=mp.cpu_count()-1, max_iter=100, seed=0, tol=10**(-3),
-              earlystop_patience=5, verbose=False, keras_epochs=250, store_best=False):
+              earlystop_patience=5, verbose=False, keras_epochs=250):
         '''
         Parameters
         ----------
@@ -30,12 +30,14 @@ class GCM:
         :param model_def: Instance of gcm_definition object, which defines the activation and transition matrix/matrices.
         :param n_jobs: Number of parallel jobs during the E-step. Note that parallelization of the M-step is regulated
         in the Keras model.
-        :param max_iter: Maximum EM iterations
-        :param seed: The random seed
-        :param tol: Tolerance with regards to the likelihood of the model
-        :param verbose: Print status of EM
-        :return: A list of the fitted variable model_definitions, current parameter estimates, and the a list of entropies computed
-        at each iteration.
+        :param max_iter: Maximum EM iterations.
+        :param seed: The random seed.
+        :param tol: Tolerance with regards to the likelihood of the model.
+        :param earlystop_patience: Number of iterations EM may continue without improvement.
+        :param verbose: Print status of EM.
+        :param keras_epochs, number of training epochs the keras model should perform each time it fits a model.
+        :return: A list containing the fitted models, a list containing the estimated latent variable values at each
+        iteration, the conditional entropy, and a list of all click estimates during each iteration.
         '''
 
         # Step 1: randomly initialize the parameters
@@ -106,13 +108,13 @@ class GCM:
                 # Store the best
                 best_entropy = cond_entropy[it]
                 early_stop_counter = 0
-                if store_best:
-                    for model_name, model in var_models.items():
-                        model_yaml = model.to_yaml()
-                        with open("./models/" + model_name +"_model.yaml", "w") as yaml_file:
-                            yaml_file.write(model_yaml)
-                        # serialize weights to HDF5
-                        model.save_weights("./models/" + model_name + "_weights.h5")
+                # if store_best:
+                #     for model_name, model in var_models.items():
+                #         model_yaml = model.to_yaml()
+                #         with open("./models/" + model_name +"_model.yaml", "w") as yaml_file:
+                #             yaml_file.write(model_yaml)
+                #         # serialize weights to HDF5
+                #         model.save_weights("./models/" + model_name + "_weights.h5")
             else:
                 early_stop_counter += 1
 
@@ -149,6 +151,9 @@ class GCM:
 
     @staticmethod
     def _format_weights_and_covariates(all_marginal_dat, model_def):
+        """
+        Add the weights for all sessions.
+        """
         weight_dic = {}
         zeta_lst = []
         i = 0
@@ -170,24 +175,25 @@ class GCM:
         zeta_mat = np.vstack(zeta_lst)
         return weight_dic, zeta_mat[:, 1:]  # Remove time 0
 
-    @staticmethod
-    def _get_weight_index_matrix(list_size, no_states):
-        # Helper function to indicate the indices for which we should sum the weights
-        index_weight_mat = None
-        for i in range(list_size):
-            cur_mat = np.zeros(list_size)
-            cur_mat[i] = 1
-            cur_mat = np.repeat(cur_mat, no_states).reshape(list_size*no_states, 1)
-            if index_weight_mat is None:
-                index_weight_mat = cur_mat
-            else:
-                index_weight_mat = np.hstack((index_weight_mat, cur_mat))
-
-        return index_weight_mat
+    # @staticmethod
+    # def _get_weight_index_matrix(list_size, no_states):
+    #     # Helper function to indicate the indices for which we should sum the weights
+    #     index_weight_mat = None
+    #     for i in range(list_size):
+    #         cur_mat = np.zeros(list_size)
+    #         cur_mat[i] = 1
+    #         cur_mat = np.repeat(cur_mat, no_states).reshape(list_size*no_states, 1)
+    #         if index_weight_mat is None:
+    #             index_weight_mat = cur_mat
+    #         else:
+    #             index_weight_mat = np.hstack((index_weight_mat, cur_mat))
+    #
+    #     return index_weight_mat
 
     @staticmethod
     def _get_prediction(var_models, var_dic):
-        # Procedure that computes the current variable predictions, using the current model parameters
+        """Procedure that computes the current variable predictions, using the current model parameters
+        """
         pred = {}
 
         for var_name, k_model in var_models.items():
@@ -208,7 +214,8 @@ class GCM:
 
     @staticmethod
     def _optimize_params(var_models, weight_dic, var_dic, verbose=0, epochs=250):
-        # Procedure that finds the next parameters, based on the current E-step
+        """Procedure that finds the next parameters, based on the current E-step
+        """
         callback = EarlyStopping(monitor='loss', patience=5)
 
         for var_name, k_model in var_models.items():
@@ -232,6 +239,9 @@ class GCM:
 
     @staticmethod
     def _compute_marginals_IO_HMM(param_dic):
+        """
+        Computes the weights at each session by adding values from the H matrix
+        """
         click_vec = param_dic['click_vec']
         var_dic = param_dic['var_dic']
         item_order = param_dic['item_order']
@@ -288,6 +298,9 @@ class GCM:
 
     @staticmethod
     def _compute_IO_HMM_est(click_vec, var_dic, item_order, model_def, i):
+        """
+        The forward-backward algorithm for click models
+        """
         # Determine all sessions weights and the state probabilities (zeta vector)
         #print(str(i))
         trans_matrices = GCM._get_trans_mat(model_def, var_dic, item_order, i)
@@ -333,6 +346,9 @@ class GCM:
 
     @staticmethod
     def _get_trans_mat(md, vars_dic, item_order, i):
+        """
+        Constructs the transition matrix based on the provided activation matrices
+        """
         # Initialize the M matrices:
         trans_matrices = []
         trans_prob_corr = dict(zip(list(vars_dic.keys()), np.zeros(len(vars_dic), dtype='int').tolist()))
@@ -386,7 +402,8 @@ class GCM:
 
     @staticmethod
     def _min_prob_or_zero(val):
-        # Helper function to avoid boundary problems
+        """Helper function to avoid boundary problems
+        """
         if val < 10 ** (-10):  # i.e., < 10**(-5) * 10**(-5), which should not be possible
             return 0
         else:

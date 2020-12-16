@@ -1,4 +1,3 @@
-import yaml
 import numpy as np
 
 
@@ -6,37 +5,6 @@ class ClickDefinition:
     """
     Class used to initialize the click model using the input YAML file.
     """
-    # In the end it was still more convenient to define everything with Python
-    # def __init__(self, loc):
-    #     """
-    #     :param loc: Location of the YAML file
-    #     """
-    #     self._loc = loc
-    #     self._act_matrices = {}
-    #     # self._param_size = {}
-    #     self._var_type = {}
-    #
-    #     with open(self._loc) as f:
-    #         definitions = yaml.load(f)
-    #
-    #         self._click_states = self._init_click_states(definitions['click_states'])
-    #         self._init_state = definitions['init_state']
-    #         self._list_size = definitions['list_size']
-    #         self._no_states = definitions['no_states']
-    #         self._batch_size = definitions['batch_size']
-    #         self._no_items = definitions['item_size']
-    #         self._absorbing_state = self._init_absorbing_state(definitions['absorbing_state'])
-    #         # self._absorbing_state = definitions['absorbing_state']
-    #
-    #         if 'skip_state' in definitions:
-    #             self._non_click_state = definitions['skip_state']
-    #
-    #         if 't0_fixed' in definitions:
-    #             self._t0_fixed = definitions['t0_fixed']
-    #         else:
-    #             self._t0_fixed = {}
-    #
-    #         self._init_act_matrices(definitions['var'])
 
     def __init__(self, click_states, init_state, list_size, no_states, batch_size, no_items, abs_state, var_dic):
         self._act_matrices = {}
@@ -66,13 +34,6 @@ class ClickDefinition:
         """
         return self._batch_size
 
-    # @property
-    # def param_shapes(self):
-    #     """
-    #     Dictionary of shapes, one for each variable in the click model
-    #     """
-    #     return self._param_size
-
     @property
     def var_type(self):
         """
@@ -86,13 +47,6 @@ class ClickDefinition:
         The state at which an item is clicked
         """
         return self._click_states
-
-    # @property
-    # def skip_state(self):
-    #     """
-    #     The state at which an item is skipped but evaluated
-    #     """
-    #     return self._non_click_state
 
     @property
     def init_state(self):
@@ -131,6 +85,9 @@ class ClickDefinition:
 
     @property
     def absorbing_state(self):
+        """
+        The absorbing state
+        """
         return self._abs_state
 
     def _init_click_states(self, click_state_lst):
