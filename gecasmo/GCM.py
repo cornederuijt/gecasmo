@@ -134,7 +134,7 @@ class GCM:
         A custom loss function, should be used in the declaration of your Keras model as loss function
         :param y_true: The true y-values
         :param y_pred: The predicted y-values
-        :return:
+        :return: The loss value
         """
         smooth = 10**(-5)
 
